@@ -850,7 +850,7 @@ decode_value_text(?POLYGONOID, Value, _OIDMap) ->
 decode_value_text(?VOIDOID, _Value, _OIDMap) -> null;
 decode_value_text(?UUIDOID, Value, _OIDMap) ->
     {ok,[AI, BI, CI, DI, EI],[]} = io_lib:fread("~16u-~16u-~16u-~16u-~16u", binary_to_list(Value)),
-    <<AI:32, BI:16, CI:16, DI:16, EI:32>>;
+    <<AI:32, BI:16, CI:16, DI:16, EI:48>>;
 decode_value_text(TypeOID, Value, _OIDMap) when TypeOID =:= ?TEXTOID
             orelse TypeOID =:= ?NAMEOID
             orelse TypeOID =:= ?BPCHAROID
