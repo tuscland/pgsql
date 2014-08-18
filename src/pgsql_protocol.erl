@@ -176,7 +176,7 @@ encode_parameter({decimal, Decimal},  _Type, _OIDMap, _IntegerDateTimes) ->
     DecimalStr = decimal_conv:string(Decimal),
     DecimalBin = list_to_binary(DecimalStr),
     Size = byte_size(DecimalBin),
-    {text, <<Size:32/integer>>, <<DecimalBin/binary>>};
+    {text, <<Size:32/integer, DecimalBin/binary>>};
 encode_parameter(null, _Type, _OIDMap, _IntegerDateTimes) ->
     {text, <<-1:32/integer>>};
 encode_parameter(true, _Type, _OIDMap, _IntegerDateTimes) ->
