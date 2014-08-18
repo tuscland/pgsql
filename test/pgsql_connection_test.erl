@@ -333,7 +333,7 @@ types_test_() ->
         },
         {"Insert uuid",
             ?_assertEqual({updated, 1}, pgsql_connection:param_query("insert into types (id, an_integer, a_bigint, a_text, a_uuid, a_bytea, a_real) values (?, ?, ?, ?, ?, ?, ?)",
-                [7, null, null, null, <<"727F42A6-E6A0-4223-9B72-6A5EB7436AB5">>, null, null], Conn))
+                [7, null, null, null, <<114,127,66,166,230,160,66,35,155,114,106,94,183,67,106,181>>, null, null], Conn))
         },
         {"Insert bytea",
             ?_assertEqual({updated, 1}, pgsql_connection:param_query("insert into types (id, an_integer, a_bigint, a_text, a_uuid, a_bytea, a_real) values (?, ?, ?, ?, ?, ?, ?)",
@@ -349,7 +349,7 @@ types_test_() ->
         },
         {"Insert all",
             ?_assertEqual({updated, 1}, pgsql_connection:param_query("insert into types (id, an_integer, a_bigint, a_text, a_uuid, a_bytea, a_real) values (?, ?, ?, ?, ?, ?, ?)",
-                [10, 42, 1099511627776, "And in the end, the love you take is equal to the love you make", <<"727F42A6-E6A0-4223-9B72-6A5EB7436AB5">>, <<"deadbeef">>, 3.1415], Conn))
+                [10, 42, 1099511627776, "And in the end, the love you take is equal to the love you make", <<114,127,66,166,230,160,66,35,155,114,106,94,183,67,106,181>>, <<"deadbeef">>, 3.1415], Conn))
         },
         {"Select values (10)",
             ?_test(begin
@@ -358,7 +358,7 @@ types_test_() ->
                 {selected, [Row]} = R,
                 ?assertMatch({10, 42, 1099511627776, <<"And in the end, the love you take is equal to the love you make">>, _UUID, <<"deadbeef">>, _Float}, Row),
                 {10, 42, 1099511627776, <<"And in the end, the love you take is equal to the love you make">>, UUID, <<"deadbeef">>, Float} = Row,
-                ?assertEqual(<<"727f42a6-e6a0-4223-9b72-6a5eb7436ab5">>, UUID),
+                ?assertEqual(<<114,127,66,166,230,160,66,35,155,114,106,94,183,67,106,181>>, UUID),
                 ?assert(Float > 3.1413),
                 ?assert(Float < 3.1416)
             end)
@@ -370,7 +370,7 @@ types_test_() ->
                 {selected, [Row]} = R,
                 ?assertMatch({10, 42, 1099511627776, <<"And in the end, the love you take is equal to the love you make">>, _UUID, <<"deadbeef">>, _Float}, Row),
                 {10, 42, 1099511627776, <<"And in the end, the love you take is equal to the love you make">>, UUID, <<"deadbeef">>, Float} = Row,
-                ?assertEqual(<<"727f42a6-e6a0-4223-9b72-6a5eb7436ab5">>, UUID),
+                ?assertEqual(<<114,127,66,166,230,160,66,35,155,114,106,94,183,67,106,181>>, UUID),
                 ?assert(Float > 3.1413),
                 ?assert(Float < 3.1416)
             end)
@@ -393,15 +393,15 @@ types_test_() ->
         },
         {"Insert uuid in lowercase",
             ?_assertEqual({updated, 1}, pgsql_connection:param_query("insert into types (id, an_integer, a_bigint, a_text, a_uuid, a_bytea, a_real) values (?, ?, ?, ?, ?, ?, ?)",
-                [16, null, null, null, <<"727f42a6-e6a0-4223-9b72-6a5eb7436ab5">>, null, null], Conn))
+                [16, null, null, null, "727f42a6-e6a0-4223-9b72-6a5eb7436ab5", null, null], Conn))
         },
         {"Insert uc uuid in text column",
             ?_assertEqual({updated, 1}, pgsql_connection:param_query("insert into types (id, an_integer, a_bigint, a_text, a_uuid, a_bytea, a_real) values (?, ?, ?, ?, ?, ?, ?)",
-                [17, null, null, <<"727F42A6-E6A0-4223-9B72-6A5EB7436AB5">>, null, null, null], Conn))
+                [17, null, null, "727F42A6-E6A0-4223-9B72-6A5EB7436AB5", null, null, null], Conn))
         },
         {"Insert lc uuid in text column",
             ?_assertEqual({updated, 1}, pgsql_connection:param_query("insert into types (id, an_integer, a_bigint, a_text, a_uuid, a_bytea, a_real) values (?, ?, ?, ?, ?, ?, ?)",
-                [18, null, null, <<"727f42a6-e6a0-4223-9b72-6a5eb7436ab5">>, null, null, null], Conn))
+                [18, null, null, "727f42a6-e6a0-4223-9b72-6a5eb7436ab5", null, null, null], Conn))
         },
         {"Select text uuid (17 \& 18)",
             ?_test(begin
@@ -797,46 +797,38 @@ numeric_types_test_() ->
     fun({_SupPid, Conn}) ->
     [
         % text values (simple_query)
-        ?_assertEqual({{select, 1}, [{127}]}, pgsql_connection:simple_query("select 127::numeric", Conn)),
-        ?_assertEqual({{select, 1}, [{-126}]}, pgsql_connection:simple_query("select -126::numeric", Conn)),
-        ?_assertEqual({{select, 1}, [{123456789012345678901234567890}]}, pgsql_connection:simple_query("select 123456789012345678901234567890::numeric", Conn)),
-        ?_assertEqual({{select, 1}, [{-123456789012345678901234567890}]}, pgsql_connection:simple_query("select -123456789012345678901234567890::numeric", Conn)),
-        ?_assertEqual({{select, 1}, [{'NaN'}]}, pgsql_connection:simple_query("select 'NaN'::numeric", Conn)),
-        ?_assertEqual({{select, 1}, [{123456789012345678901234.567890}]}, pgsql_connection:simple_query("select 123456789012345678901234.567890::numeric", Conn)),
-        ?_assertEqual({{select, 1}, [{-123456789012345678901234.567890}]}, pgsql_connection:simple_query("select -123456789012345678901234.567890::numeric", Conn)),
-        ?_assertEqual({{select, 1}, [{1000000.0}]}, pgsql_connection:simple_query("select 1000000.0::numeric", [], Conn)),
-        ?_assertEqual({{select, 1}, [{10000.0}]}, pgsql_connection:simple_query("select 10000.0::numeric", [], Conn)),
-        ?_assertEqual({{select, 1}, [{100.0}]}, pgsql_connection:simple_query("select 100.0::numeric", [], Conn)),
-        ?_assertEqual({{select, 1}, [{1.0}]}, pgsql_connection:simple_query("select 1.0::numeric", [], Conn)),
-        ?_assertEqual({{select, 1}, [{0.0}]}, pgsql_connection:simple_query("select 0.0::numeric", [], Conn)),
-        ?_assertEqual({{select, 1}, [{0.1}]}, pgsql_connection:simple_query("select 0.1::numeric", [], Conn)),
-        ?_assertEqual({{select, 1}, [{0.00001}]}, pgsql_connection:simple_query("select 0.00001::numeric", [], Conn)),
-        ?_assertEqual({{select, 1}, [{0.0000001}]}, pgsql_connection:simple_query("select 0.0000001::numeric", [], Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 127, 0}}}]}, pgsql_connection:simple_query("select 127::numeric", Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {1, 126, 0}}}]}, pgsql_connection:simple_query("select -126::numeric", Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 123456789012345678901234567890, 0}}}]}, pgsql_connection:simple_query("select 123456789012345678901234567890::numeric", Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {1, 123456789012345678901234567890, 0}}}]}, pgsql_connection:simple_query("select -123456789012345678901234567890::numeric", Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, qNaN}}}]}, pgsql_connection:simple_query("select 'NaN'::numeric", Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 123456789012345678901234567890, -6}}}]}, pgsql_connection:simple_query("select 123456789012345678901234.567890::numeric", Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {1, 123456789012345678901234567890, -6}}}]}, pgsql_connection:simple_query("select -123456789012345678901234.567890::numeric", Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 10000000, -1}}}]}, pgsql_connection:simple_query("select 1000000.0::numeric", Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 100000, -1}}}]}, pgsql_connection:simple_query("select 10000.0::numeric", Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 1000, -1}}}]}, pgsql_connection:simple_query("select 100.0::numeric", Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 10, -1}}}]}, pgsql_connection:simple_query("select 1.0::numeric", Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 0, -1}}}]}, pgsql_connection:simple_query("select 0.0::numeric", Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 1, -1}}}]}, pgsql_connection:simple_query("select 0.1::numeric", Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 1, -5}}}]}, pgsql_connection:simple_query("select 0.00001::numeric", Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 1, -7}}}]}, pgsql_connection:simple_query("select 0.0000001::numeric", Conn)),
 
         % binary values (extended_query)
-        ?_assertEqual({{select, 1}, [{127}]}, pgsql_connection:extended_query("select 127::numeric", [], Conn)),
-        ?_assertEqual({{select, 1}, [{-126}]}, pgsql_connection:extended_query("select -126::numeric", [], Conn)),
-        ?_assertEqual({{select, 1}, [{123456789012345678901234567890}]}, pgsql_connection:extended_query("select 123456789012345678901234567890::numeric", [], Conn)),
-        ?_assertEqual({{select, 1}, [{-123456789012345678901234567890}]}, pgsql_connection:extended_query("select -123456789012345678901234567890::numeric", [], Conn)),
-        ?_assertEqual({{select, 1}, [{'NaN'}]}, pgsql_connection:extended_query("select 'NaN'::numeric", [], Conn)),
-        ?_test(begin
-            {{select, 1}, [{Val}]} = pgsql_connection:extended_query("select 123456789012345678901234.567890::numeric", [], Conn),
-            ?assert(Val > 123456789012345500000000.0),
-            ?assert(Val < 123456789012345700000000.0)
-        end),
-        ?_test(begin
-            {{select, 1}, [{Val}]} = pgsql_connection:extended_query("select -123456789012345678901234.567890::numeric", [], Conn),
-            ?assert(Val > -123456789012345700000000.0),
-            ?assert(Val < -123456789012345500000000.0)
-        end),
-        ?_assertEqual({{select, 1}, [{1000000.0}]}, pgsql_connection:extended_query("select 1000000.0::numeric", [], Conn)),
-        ?_assertEqual({{select, 1}, [{10000.0}]}, pgsql_connection:extended_query("select 10000.0::numeric", [], Conn)),
-        ?_assertEqual({{select, 1}, [{100.0}]}, pgsql_connection:extended_query("select 100.0::numeric", [], Conn)),
-        ?_assertEqual({{select, 1}, [{1.0}]}, pgsql_connection:extended_query("select 1.0::numeric", [], Conn)),
-        ?_assertEqual({{select, 1}, [{0.0}]}, pgsql_connection:extended_query("select 0.0::numeric", [], Conn)),
-        ?_assertEqual({{select, 1}, [{0.1}]}, pgsql_connection:extended_query("select 0.1::numeric", [], Conn)),
-        ?_assertEqual({{select, 1}, [{0.00001}]}, pgsql_connection:extended_query("select 0.00001::numeric", [], Conn)),
-        ?_assertEqual({{select, 1}, [{0.0000001}]}, pgsql_connection:extended_query("select 0.0000001::numeric", [], Conn))
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 127, 0}}}]}, pgsql_connection:extended_query("select 127::numeric", [], Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {1, 126, 0}}}]}, pgsql_connection:extended_query("select -126::numeric", [], Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 123456789012345678901234567890, 0}}}]}, pgsql_connection:extended_query("select 123456789012345678901234567890::numeric", [], Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {1, 123456789012345678901234567890, 0}}}]}, pgsql_connection:extended_query("select -123456789012345678901234567890::numeric", [], Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, qNaN}}}]}, pgsql_connection:extended_query("select 'NaN'::numeric", [], Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 123456789012345678901234567890, -6}}}]}, pgsql_connection:extended_query("select 123456789012345678901234.567890::numeric", [], Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {1, 123456789012345678901234567890, -6}}}]}, pgsql_connection:extended_query("select -123456789012345678901234.567890::numeric", [], Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 10000000, -1}}}]}, pgsql_connection:extended_query("select 1000000.0::numeric", [], Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 100000, -1}}}]}, pgsql_connection:extended_query("select 10000.0::numeric", [], Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 1000, -1}}}]}, pgsql_connection:extended_query("select 100.0::numeric", [], Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 10, -1}}}]}, pgsql_connection:extended_query("select 1.0::numeric", [], Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 0, -1}}}]}, pgsql_connection:extended_query("select 0.0::numeric", [], Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 1, -1}}}]}, pgsql_connection:extended_query("select 0.1::numeric", [], Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 1, -5}}}]}, pgsql_connection:extended_query("select 0.00001::numeric", [], Conn)),
+        ?_assertEqual({{select, 1}, [{{decimal, {0, 1, -7}}}]}, pgsql_connection:extended_query("select 0.0000001::numeric", [], Conn))
     ]
     end}.
 
