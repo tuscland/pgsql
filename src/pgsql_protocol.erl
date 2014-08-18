@@ -129,19 +129,6 @@ encode_format(binary) -> <<1:16/integer>>.
 encode_parameter({array, List}, Type, OIDMap, IntegerDateTimes) ->
     encode_array(List, Type, OIDMap, IntegerDateTimes);
 encode_parameter(Binary, _Type, _OIDMap, _IntegerDateTimes) when is_binary(Binary) ->
-    % Encode the binary as text if it is a UUID.
-%%     IsUUID = case Binary of
-%%         <<_A:8/binary, $-, _B:4/binary, $-, _C:4/binary, $-, _D:4/binary, $-, _E:12/binary>> ->
-%%             case io_lib:fread("~16u-~16u-~16u-~16u-~16u", binary_to_list(Binary)) of
-%%                 {ok,[_AI, _BI, _CI, _DI, _EI],[]} -> true;
-%%                 _ -> false
-%%             end;
-%%         _ -> false
-%%     end,
-%%     Type = if
-%%         IsUUID -> text;
-%%         true -> binary
-%%     end,
     Type = binary,
     Size = byte_size(Binary),
     {Type, <<Size:32/integer, Binary/binary>>};
@@ -155,9 +142,14 @@ encode_parameter(Float, _Type, _OIDMap, _IntegerDateTimes) when is_float(Float) 
     {text, <<Size:32/integer, FloatStrBin/binary>>};
 encode_parameter(Integer, _Type, _OIDMap, _IntegerDateTimes) when is_integer(Integer) ->
     IntegerStr = integer_to_list(Integer),
-    IntegerStrBin = list_to_binary(IntegerStr),
-    IntegerStrLen = byte_size(IntegerStrBin),
-    {text, <<IntegerStrLen:32/integer, IntegerStrBin/binary>>};
+    IntegerBin = list_to_binary(IntegerStr),
+    Size = byte_size(IntegerBin),
+    {text, <<Size:32/integer, IntegerBin/binary>>};
+encode_parameter({decimal, Decimal},  _Type, _OIDMap, _IntegerDateTimes) ->
+    DecimalStr = decimal_conv:string(Decimal),
+    DecimalBin = list_to_binary(DecimalStr),
+    Size = byte_size(DecimalBin),
+    {text, <<Size:32/integer>>, <<DecimalBin/binary>>};
 encode_parameter(null, _Type, _OIDMap, _IntegerDateTimes) ->
     {text, <<-1:32/integer>>};
 encode_parameter(true, _Type, _OIDMap, _IntegerDateTimes) ->
@@ -745,7 +737,7 @@ decode_value(#row_description_field{data_type_oid = DataTypeOID, format = binary
 
 decode_value_text(TypeOID, Value, _OIDMap) when TypeOID =:= ?INT8OID orelse TypeOID =:= ?INT2OID orelse TypeOID =:= ?INT4OID orelse TypeOID =:= ?OIDOID ->
     list_to_integer(binary_to_list(Value));
-decode_value_text(TypeOID, Value, _OIDMap) when TypeOID =:= ?FLOAT4OID orelse TypeOID =:= ?FLOAT8OID orelse TypeOID =:= ?NUMERICOID ->
+decode_value_text(TypeOID, Value, _OIDMap) when TypeOID =:= ?FLOAT4OID orelse TypeOID =:= ?FLOAT8OID ->
     case Value of
         <<"NaN">> -> 'NaN';
         <<"Infinity">> -> 'Infinity';
@@ -754,10 +746,13 @@ decode_value_text(TypeOID, Value, _OIDMap) when TypeOID =:= ?FLOAT4OID orelse Ty
             FloatStr = binary_to_list(Value),
             case lists:member($., FloatStr) of
                 true -> list_to_float(FloatStr);
-                false when TypeOID =:= ?NUMERICOID -> list_to_integer(FloatStr);
                 false -> list_to_integer(FloatStr) * 1.0
             end
     end;
+decode_value_text(?NUMERICOID, Value, _OIDMap) ->
+    DecimalStr = binary_to_list(Value),
+    Decimal = decimal_conv:number(DecimalStr),
+    {decimal, Decimal};
 decode_value_text(?BOOLOID, <<"t">>, _OIDMap) -> true;
 decode_value_text(?BOOLOID, <<"f">>, _OIDMap) -> false;
 decode_value_text(?BYTEAOID, Value, _OIDMap) ->
@@ -934,9 +929,6 @@ decode_value_bin(?FLOAT8OID, <<127,240,0,0,0,0,0,0>>, _OIDMap, _IntegerDateTimes
 decode_value_bin(?FLOAT8OID, <<255,240,0,0,0,0,0,0>>, _OIDMap, _IntegerDateTimes) -> '-Infinity';
 decode_value_bin(?UUIDOID, Value, _OIDMap, _IntegerDateTimes) ->
     Value;
-%%     <<UUID_A:32/integer, UUID_B:16/integer, UUID_C:16/integer, UUID_D:16/integer, UUID_E:48/integer>> = Value,
-%%     UUIDStr = io_lib:format("~8.16.0b-~4.16.0b-~4.16.0b-~4.16.0b-~12.16.0b", [UUID_A, UUID_B, UUID_C, UUID_D, UUID_E]),
-%%     list_to_binary(UUIDStr);
 decode_value_bin(?DATEOID, <<Date:32/signed-integer>>, _OIDMap, true) -> calendar:gregorian_days_to_date(Date + ?POSTGRESQL_GD_EPOCH);
 decode_value_bin(?TIMEOID, <<Time:64/signed-integer>>, _OIDMap, true) -> decode_time_int(Time);
 decode_value_bin(?TIMETZOID, <<Time:64/signed-integer, _TZ:32/integer>>, _OIDMap, true) -> decode_time_int(Time);
@@ -1007,35 +999,28 @@ decode_array_bin_aux(ElementOID, <<Size:32/signed-integer, Next/binary>>, OIDMap
     Value = decode_value_bin(ElementOID, ValueBin, OIDMap, IntegerDateTimes),
     decode_array_bin_aux(ElementOID, Rest, OIDMap, IntegerDateTimes, [Value | Acc]).
 
-decode_numeric_bin(<<0:16/unsigned, _Weight:16, 16#C000:16/unsigned, 0:16/unsigned>>) -> 'NaN';
+decode_numeric_bin(<<0:16/unsigned, _Weight:16, 16#C000:16/unsigned, 0:16/unsigned>>) -> {decimal, {0, qNaN}};
 decode_numeric_bin(<<Len:16/unsigned, Weight:16/signed, Sign:16/unsigned, DScale:16/unsigned, Tail/binary>>) when Sign =:= 16#0000 orelse Sign =:= 16#4000 ->
     Len = byte_size(Tail) div 2,
     {ValueInt, DecShift} = decode_numeric_bin0(Tail, Weight, 0),
-    ValueDec = decode_numeric_bin_scale(ValueInt, DecShift),
-    SignedDec = case Sign of
-        16#0000 -> ValueDec;
-        16#4000 -> -ValueDec
-    end,
-    % Convert to float if there are digits after the decimal point.
-    if
-        DScale > 0 andalso is_integer(SignedDec) -> SignedDec * 1.0;
-        true -> SignedDec
-    end.
+    DecSign = case Sign of
+                16#0000 -> 0;
+                16#4000 -> 1
+              end,
+    Coefficient = decshift(ValueInt, -(DecShift + DScale)),
+    {decimal, {DecSign, Coefficient, -DScale}}.
+
+decshift(V, 0) -> V;
+decshift(V, E) when E < 0 -> decshift(V * 10, E + 1);
+decshift(V, E) when E > 0 -> decshift(V div 10, E - 1).
+
 
 -define(NBASE, 10000).
 
-decode_numeric_bin0(<<>>, Weight, Acc) -> {Acc, Weight};
+decode_numeric_bin0(<<>>, Weight, Acc) -> {Acc, (Weight + 1) * 4};
 decode_numeric_bin0(<<Digit:16, Tail/binary>>, Weight, Acc) when Digit >= 0 andalso Digit < ?NBASE ->
     NewAcc = (Acc * ?NBASE) + Digit,
     decode_numeric_bin0(Tail, Weight - 1, NewAcc).
-
-decode_numeric_bin_scale(Value, -1) -> Value;
-decode_numeric_bin_scale(Value, DecShift) when DecShift < 0 ->
-    NewValue = Value / ?NBASE,
-    decode_numeric_bin_scale(NewValue, DecShift + 1);
-decode_numeric_bin_scale(Value, DecShift) when DecShift >= 0 ->
-    NewValue = Value * ?NBASE,
-    decode_numeric_bin_scale(NewValue, DecShift - 1).
 
 decode_oid(Oid, OIDMap) ->
     case gb_trees:lookup(Oid, OIDMap) of
