@@ -140,7 +140,8 @@ encode_parameter(Integer, _Type, _OIDMap, _IntegerDateTimes) when is_integer(Int
     IntegerBin = list_to_binary(IntegerStr),
     Size = byte_size(IntegerBin),
     {text, <<Size:32/integer, IntegerBin/binary>>};
-encode_parameter({decimal, Decimal},  _Type, _OIDMap, _IntegerDateTimes) ->
+encode_parameter({decimal, Decimal}, _Type, _OIDMap, _IntegerDateTimes) ->
+    %% Why is the Type undefined?
     DecimalStr = decimal_conv:string(Decimal),
     DecimalBin = list_to_binary(DecimalStr),
     Size = byte_size(DecimalBin),
@@ -151,6 +152,9 @@ encode_parameter(true, _Type, _OIDMap, _IntegerDateTimes) ->
     {text, <<1:32/integer, $t>>};
 encode_parameter(false, _Type, _OIDMap, _IntegerDateTimes) ->
     {text, <<1:32/integer, $f>>};
+encode_parameter(Value, Type, OIDMap, IntegerDateTimes) when is_atom(Value) ->
+    %% ct: Why is the Type undefined? If the Type was defined, we could do better pattern matching.
+    encode_parameter(atom_to_binary(Value, utf8), Type, OIDMap, IntegerDateTimes);
 encode_parameter({{Year, Month, Day}, {Hour, Min, Sec}}, Type, OIDMap, IntegerDateTimes) when is_float(Sec) ->
     encode_text_parameter(unicode:characters_to_binary(io_lib:format("~4.10.0B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~9.6.0f", [Year, Month, Day, Hour, Min, Sec])), Type, OIDMap, IntegerDateTimes);
 encode_parameter({{Year, Month, Day}, {Hour, Min, Sec}}, Type, OIDMap, IntegerDateTimes) ->
@@ -847,7 +851,7 @@ decode_value_text(TypeOID, Value, OIDMap) ->
                     OIDContentType = type_to_oid(list_to_atom(ContentType), OIDMap),
                     {R, _} = decode_array_text(OIDContentType, OIDMap, Value, []),
                     R;
-                _ -> {Type, Value}
+                _ -> binary_to_atom(Value, utf8)
             end
     end.
 
@@ -952,7 +956,7 @@ decode_value_bin(TypeOID, Value, OIDMap, IntegerDateTimes) ->
             case atom_to_list(Type) of
                 [$_ | _] -> % Array
                     decode_array_bin(Value, OIDMap, IntegerDateTimes);
-                _ -> {Type, Value}
+                _ -> binary_to_atom(Value, utf8)
             end
     end.
 
