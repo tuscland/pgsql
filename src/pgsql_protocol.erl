@@ -153,16 +153,11 @@ encode_format(binary) -> <<1:16/integer>>.
 %% encoded as binaries.
 %%
 -spec encode_parameter(any(), pgsql_oid() | undefined, pgsql_oid_map(), boolean()) -> {text | binary, binary()}.
-encode_parameter({array, List}, Type, OIDMap, IntegerDateTimes) ->
+encode_parameter(List, Type, OIDMap, IntegerDateTimes) when is_list(List) ->
     encode_array(List, Type, OIDMap, IntegerDateTimes);
 encode_parameter(Binary, _Type, _OIDMap, _IntegerDateTimes) when is_binary(Binary) ->
-    Type = binary,
     Size = byte_size(Binary),
-    {Type, <<Size:32/integer, Binary/binary>>};
-encode_parameter(String, _Type, _OIDMap, _IntegerDateTimes) when is_list(String) ->
-    Binary = list_to_binary(String),
-    Size = byte_size(Binary),
-    {text, <<Size:32/integer, Binary/binary>>};
+    {binary, <<Size:32/integer, Binary/binary>>};
 encode_parameter(Float, _Type, _OIDMap, _IntegerDateTimes) when is_float(Float) ->
     FloatStrBin = list_to_binary(float_to_list(Float)),
     Size = byte_size(FloatStrBin),
@@ -184,15 +179,15 @@ encode_parameter(true, _Type, _OIDMap, _IntegerDateTimes) ->
 encode_parameter(false, _Type, _OIDMap, _IntegerDateTimes) ->
     {text, <<1:32/integer, $f>>};
 encode_parameter({{Year, Month, Day}, {Hour, Min, Sec}}, Type, OIDMap, IntegerDateTimes) when is_float(Sec) ->
-    encode_parameter(lists:flatten(io_lib:format("~4.10.0B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~9.6.0f", [Year, Month, Day, Hour, Min, Sec])), Type, OIDMap, IntegerDateTimes);
+    encode_text_parameter(unicode:characters_to_binary(io_lib:format("~4.10.0B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~9.6.0f", [Year, Month, Day, Hour, Min, Sec])), Type, OIDMap, IntegerDateTimes);
 encode_parameter({{Year, Month, Day}, {Hour, Min, Sec}}, Type, OIDMap, IntegerDateTimes) ->
-    encode_parameter(lists:flatten(io_lib:format("~4.10.0B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0B", [Year, Month, Day, Hour, Min, Sec])), Type, OIDMap, IntegerDateTimes);
+    encode_text_parameter(unicode:characters_to_binary(io_lib:format("~4.10.0B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0B", [Year, Month, Day, Hour, Min, Sec])), Type, OIDMap, IntegerDateTimes);
 encode_parameter({Hour, Min, Sec}, Type, OIDMap, IntegerDateTimes) when is_float(Sec) andalso Hour >= 0 andalso Hour < 24 andalso Min >= 0 andalso Min < 60 andalso Sec > 0 andalso Sec =< 60 ->
-    encode_parameter(lists:flatten(io_lib:format("~2.10.0B:~2.10.0B:~9.6.0f", [Hour, Min, Sec])), Type, OIDMap, IntegerDateTimes);
+    encode_text_parameter(unicode:characters_to_binary(io_lib:format("~2.10.0B:~2.10.0B:~9.6.0f", [Hour, Min, Sec])), Type, OIDMap, IntegerDateTimes);
 encode_parameter({Hour, Min, Sec}, Type, OIDMap, IntegerDateTimes) when Hour >= 0 andalso Hour < 24 andalso Min >= 0 andalso Min < 60 andalso Sec > 0 andalso Sec =< 60 ->
-    encode_parameter(lists:flatten(io_lib:format("~2.10.0B:~2.10.0B:~2.10.0B", [Hour, Min, Sec])), Type, OIDMap, IntegerDateTimes);
+    encode_text_parameter(unicode:characters_to_binary(io_lib:format("~2.10.0B:~2.10.0B:~2.10.0B", [Hour, Min, Sec])), Type, OIDMap, IntegerDateTimes);
 encode_parameter({Year, Month, Day}, Type, OIDMap, IntegerDateTimes) when Month > 0 andalso Month =< 12 andalso Day > 0 andalso Day =< 31 ->
-    encode_parameter(lists:flatten(io_lib:format("~4.10.0B-~2.10.0B-~2.10.0B", [Year, Month, Day])), Type, OIDMap, IntegerDateTimes);
+    encode_text_parameter(unicode:characters_to_binary(io_lib:format("~4.10.0B-~2.10.0B-~2.10.0B", [Year, Month, Day])), Type, OIDMap, IntegerDateTimes);
 encode_parameter({point, P}, _Type, _OIDMap, _IntegerDateTimes) ->
     Binary = encode_point_text(P),
     Size = byte_size(Binary),
@@ -223,6 +218,10 @@ encode_parameter({polygon, [_|_]=PList}, _Type, _OIDMap, _IntegerDateTimes) ->
     {text, <<Size:32/integer, Binary/binary>>};
 encode_parameter(Value, _Type, _OIDMap, _IntegerDateTimes) ->
     throw({badarg, Value}).
+
+encode_text_parameter(Value, _Type, _OIDMap, _IntegerDateTimes) when is_binary(Value) ->
+    Size = byte_size(Value),
+    {text, <<Size:32/integer, Value/binary>>}.
 
 encode_point_text({X, Y}) ->
     XBin = list_to_binary(case is_integer(X) of true -> integer_to_list(X); false -> float_to_list(X) end),
@@ -291,9 +290,9 @@ array_type_to_element_type(TypeOID, OIDMap) ->
             end
     end.
 
-encode_array_elements([{array, SubArray} | Tail], ElementType, OIDMap, IntegerDateTimes, EncodingType, Acc) ->
+encode_array_elements([SubArray | Tail], ElementType, OIDMap, IntegerDateTimes, EncodingType, Acc) when is_list(SubArray) ->
     {NewEncodingType, SubArrayElements} = encode_array_elements(SubArray, ElementType, OIDMap, IntegerDateTimes, EncodingType, []),
-    encode_array_elements(Tail, ElementType, OIDMap, IntegerDateTimes, NewEncodingType, [{array, SubArrayElements} | Acc]);
+    encode_array_elements(Tail, ElementType, OIDMap, IntegerDateTimes, NewEncodingType, [SubArrayElements | Acc]);
 encode_array_elements([null | Tail], ElementType, OIDMap, IntegerDateTimes, EncodingType, Acc) ->
     encode_array_elements(Tail, ElementType, OIDMap, IntegerDateTimes, EncodingType, [null | Acc]);
 encode_array_elements([Element | Tail], ElementType, OIDMap, IntegerDateTimes, undefined, Acc) ->
@@ -310,7 +309,7 @@ encode_array_text([null | Tail], Acc) ->
 encode_array_text([<<_TextSize:32/integer, Text/binary>> | Tail], Acc) ->
     Escaped = escape_array_text(Text),
     encode_array_text(Tail, [Escaped | Acc]);
-encode_array_text([{array, SubArray} | Tail], Acc) when is_list(SubArray) ->
+encode_array_text([SubArray | Tail], Acc) when is_list(SubArray) ->
     SubArrayEncoded = encode_array_text(SubArray, []),
     encode_array_text(Tail, [SubArrayEncoded | Acc]);
 encode_array_text([], Acc) ->
@@ -322,7 +321,7 @@ encode_array_text([], Acc) ->
     Binary = list_to_binary([<<"{">>, JoinedStrings, <<"}">>]),
     Size = byte_size(Binary),
     {text, <<Size:32, Binary/binary>>}.
-    
+
 escape_array_text(Text) when byte_size(Text) =:= 4 ->
     case string:to_lower(unicode:characters_to_list(Text)) of
         "null" -> <<$", Text/binary, $">>;
@@ -354,13 +353,13 @@ encode_array_binary_row([null | Tail], _HasNull, Acc) ->
     encode_array_binary_row(Tail, true, [<<-1:32/integer>> | Acc]);
 encode_array_binary_row([<<_BinarySize:32/integer, _BinaryVal/binary>> = Binary | Tail], HasNull, Acc) ->
     encode_array_binary_row(Tail, HasNull, [Binary | Acc]);
-encode_array_binary_row([{array, Elements} | Tail], HasNull, Acc) ->
+encode_array_binary_row([Elements | Tail], HasNull, Acc) when is_list(Elements) ->
     {NewHasNull, Row} = encode_array_binary_row(Elements, HasNull, []),
     encode_array_binary_row(Tail, NewHasNull, [Row | Acc]);
 encode_array_binary_row([], HasNull, AccRow) ->
     {HasNull, lists:reverse(AccRow)}.
 
-get_array_dims([{array, SubElements} | _] = Row) ->
+get_array_dims([SubElements | _] = Row) when is_list(SubElements) ->
     Dims0 = get_array_dims(SubElements),
     Dim = length(Row),
     [Dim | Dims0];
@@ -388,12 +387,12 @@ encode_array_binary_header(Dims, HasNulls, ElementTypeOID) ->
 %% binaries.
 -spec bind_requires_statement_description([any()]) -> boolean().
 bind_requires_statement_description([]) -> false;
-bind_requires_statement_description([{array, [{array, SubArrayElems} | SubArrayT]} | Tail]) ->
-    bind_requires_statement_description([{array, SubArrayElems}, {array, SubArrayT} | Tail]);
-bind_requires_statement_description([{array, [ArrayElem | _]} | _]) when is_binary(ArrayElem) -> true;
-bind_requires_statement_description([{array, [null | ArrayElemsT]} | Tail]) ->
-    bind_requires_statement_description([{array, ArrayElemsT} | Tail]);
-bind_requires_statement_description([{array, []} | Tail]) ->
+bind_requires_statement_description([[SubArrayElems | SubArrayT] | Tail]) when is_list(SubArrayElems), is_list(SubArrayT) ->
+    bind_requires_statement_description([SubArrayElems, SubArrayT | Tail]);
+bind_requires_statement_description([[ArrayElem | _] | _]) when is_binary(ArrayElem) -> true;
+bind_requires_statement_description([[null | ArrayElemsT] | Tail]) ->
+    bind_requires_statement_description([ArrayElemsT | Tail]);
+bind_requires_statement_description([[] | Tail]) ->
     bind_requires_statement_description(Tail);
 bind_requires_statement_description([_OtherParam | Tail]) ->
     bind_requires_statement_description(Tail).
@@ -927,7 +926,7 @@ decode_array_text(_Type, _OIDMap, <<>>, [Acc]) ->
     {Acc, <<>>};
 decode_array_text(Type, OIDMap, <<"{", Next/binary>>, Acc) ->
     {R, Next2} = decode_array_text(Type, OIDMap, Next, []),
-    decode_array_text(Type, OIDMap, Next2, [{array, R} | Acc]);
+    decode_array_text(Type, OIDMap, Next2, [R | Acc]);
 decode_array_text(_Type, _OIDMap, <<"}", Next/binary>>, Acc) ->
     {lists:reverse(Acc), Next};
 decode_array_text(Type, OIDMap, <<",", Next/binary>>, Acc) ->
@@ -1013,7 +1012,7 @@ decode_array_bin(<<Dimensions:32/signed-integer, _Flags:32/signed-integer, Eleme
     Expanded.
 
 expand([], []) ->
-    {array, []};
+    [];
 expand([List], []) ->
     List;
 expand(List, [{Nbr,_}|NextDim]) ->
@@ -1021,9 +1020,9 @@ expand(List, [{Nbr,_}|NextDim]) ->
     expand(List2, NextDim).
 
 expand_aux([], 0, _, Current, Acc) ->
-    lists:reverse([{array, lists:reverse(Current)} | Acc]);
+    lists:reverse([lists:reverse(Current) | Acc]);
 expand_aux(List, 0, Nbr, Current, Acc) ->
-    expand_aux(List, Nbr, Nbr, [], [ {array, lists:reverse(Current)} | Acc]);
+    expand_aux(List, Nbr, Nbr, [], [ lists:reverse(Current) | Acc]);
 expand_aux([E|Next], Level, Nbr, Current, Acc) ->
     expand_aux(Next, Level-1, Nbr, [E | Current], Acc).
 
