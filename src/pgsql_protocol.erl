@@ -863,7 +863,7 @@ decode_value_text(TypeOID, Value, OIDMap) ->
                     OIDContentType = type_to_oid(list_to_atom(ContentType), OIDMap),
                     {R, _} = decode_array_text(OIDContentType, OIDMap, Value, []),
                     R;
-                _ -> binary_to_atom(Value, utf8)
+                _ -> Value
             end
     end.
 
@@ -994,7 +994,7 @@ decode_value_bin(TypeOID, Value, OIDMap, IntegerDateTimes) ->
             case atom_to_list(Type) of
                 [$_ | _] -> % Array
                     decode_array_bin(Value, OIDMap, IntegerDateTimes);
-                _ -> binary_to_atom(Value, utf8)
+                _ -> Value
             end
     end.
 
