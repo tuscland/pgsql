@@ -173,6 +173,11 @@ encode_parameter({decimal, Decimal}, _Type, _OIDMap, _IntegerDateTimes) ->
     DecimalBin = list_to_binary(DecimalStr),
     Size = byte_size(DecimalBin),
     {text, <<Size:32/integer, DecimalBin/binary>>};
+encode_parameter({inet, IPAddress}, _Type, _OIDMap, _IntegerDateTimes) ->
+    IPAddressStr = inet:ntoa(IPAddress),
+    IPAddressBin = list_to_binary(IPAddressStr),
+    Size = byte_size(IPAddressBin),
+    {text, <<Size:32/integer, IPAddressBin/binary>>};
 encode_parameter(null, _Type, _OIDMap, _IntegerDateTimes) ->
     {text, <<-1:32/integer>>};
 encode_parameter(true, _Type, _OIDMap, _IntegerDateTimes) ->
@@ -785,9 +790,13 @@ decode_value_text(TypeOID, Value, _OIDMap) when TypeOID =:= ?FLOAT4OID orelse Ty
             end
     end;
 decode_value_text(?NUMERICOID, Value, _OIDMap) ->
-    DecimalStr = binary_to_list(Value),
-    Decimal = decimal_conv:number(DecimalStr),
+    Decimal = decimal_conv:number(
+        binary_to_list(Value)),
     {decimal, Decimal};
+decode_value_text(?INETOID, Value, _OIDMap) ->
+    IPAddress = inet:parse_address(
+        binary_to_list(Value)),
+    {inet, IPAddress};
 decode_value_text(?BOOLOID, <<"t">>, _OIDMap) -> true;
 decode_value_text(?BOOLOID, <<"f">>, _OIDMap) -> false;
 decode_value_text(?BYTEAOID, Value, _OIDMap) ->
@@ -968,6 +977,10 @@ decode_value_bin(?FLOAT8OID, <<Value:64/float>>, _OIDMap, _IntegerDateTimes) -> 
 decode_value_bin(?FLOAT8OID, <<127,248,0,0,0,0,0,0>>, _OIDMap, _IntegerDateTimes) -> 'NaN';
 decode_value_bin(?FLOAT8OID, <<127,240,0,0,0,0,0,0>>, _OIDMap, _IntegerDateTimes) -> 'Infinity';
 decode_value_bin(?FLOAT8OID, <<255,240,0,0,0,0,0,0>>, _OIDMap, _IntegerDateTimes) -> '-Infinity';
+decode_value_bin(?INETOID, <<2,  32, 0,  4, B1, B2, B3, B4>>, _OIDMap, _IntegerDateTimes) ->
+    {inet, {B1, B2, B3, B4}};
+decode_value_bin(?INETOID, <<3, 128, 0, 16, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16>>, _OIDMap, _IntegerDateTimes) ->
+    {inet, {B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16}};
 decode_value_bin(?UUIDOID, Value, _OIDMap, _IntegerDateTimes) ->
     Value;
 decode_value_bin(?DATEOID, <<Date:32/signed-integer>>, _OIDMap, true) -> calendar:gregorian_days_to_date(Date + ?POSTGRESQL_GD_EPOCH);
