@@ -794,7 +794,7 @@ decode_value_text(?NUMERICOID, Value, _OIDMap) ->
         binary_to_list(Value)),
     {decimal, Decimal};
 decode_value_text(?INETOID, Value, _OIDMap) ->
-    IPAddress = inet:parse_address(
+    {ok, IPAddress} = inet:parse_address(
         binary_to_list(Value)),
     {inet, IPAddress};
 decode_value_text(?BOOLOID, <<"t">>, _OIDMap) -> true;
