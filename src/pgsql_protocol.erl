@@ -173,6 +173,9 @@ encode_parameter({decimal, Decimal}, _Type, _OIDMap, _IntegerDateTimes) ->
     DecimalBin = list_to_binary(DecimalStr),
     Size = byte_size(DecimalBin),
     {text, <<Size:32/integer, DecimalBin/binary>>};
+encode_parameter({json, JSONString}, _Type, _OIDMap, _IntegerDateTimes) ->
+    Size = byte_size(JSONString),
+    {text, <<Size:32/integer, JSONString/binary>>};
 encode_parameter({inet, IPAddress}, _Type, _OIDMap, _IntegerDateTimes) ->
     IPAddressStr = inet:ntoa(IPAddress),
     IPAddressBin = list_to_binary(IPAddressStr),
