@@ -3,6 +3,7 @@
 -module(pgsql_protocol).
 -vsn("3").
 % -include_lib("commonlib/include/compile_time.hrl").
+-include_lib("decimal/include/decimal.hrl").
 -include("pgsql_internal.hrl").
 
 -export([
@@ -22,10 +23,10 @@
     encode_copy_data_message/1,
     encode_copy_done/0,
     encode_copy_fail/1,
-    
+
     decode_message/2,
     decode_row/4,
-    
+
     bind_requires_statement_description/1
     ]).
 
@@ -96,7 +97,7 @@ encode_copy_done() ->
 -spec encode_copy_fail(iodata()) -> binary().
 encode_copy_fail(ErrorMessage) ->
     encode_string_message($f, ErrorMessage).
-    
+
 %%--------------------------------------------------------------------
 %% @doc Encode a parse message.
 %%
@@ -169,8 +170,7 @@ encode_parameter(Integer, _Type, _OIDMap, _IntegerDateTimes) when is_integer(Int
     {text, <<Size:32/integer, IntegerBin/binary>>};
 encode_parameter({decimal, Decimal}, _Type, _OIDMap, _IntegerDateTimes) ->
     %% Why is the Type undefined?
-    DecimalStr = decimal_conv:string(Decimal),
-    DecimalBin = list_to_binary(DecimalStr),
+    DecimalBin = ?to_binary(Decimal),
     Size = byte_size(DecimalBin),
     {text, <<Size:32/integer, DecimalBin/binary>>};
 encode_parameter({json, JSONString}, _Type, _OIDMap, _IntegerDateTimes) ->
@@ -456,7 +456,7 @@ encode_cancel_message(ProcID, Secret) ->
 %% @doc Encode a string message.
 %%
 -spec encode_string_message(byte(), iodata()) -> binary().
-encode_string_message(Identifier, String) ->    
+encode_string_message(Identifier, String) ->
     StringBin = iolist_to_binary(String),
     MessageLen = byte_size(StringBin) + 5,
     <<Identifier, MessageLen:32/integer, StringBin/binary, 0>>.
@@ -571,7 +571,7 @@ decode_data_row_values0(<<-1:32/signed-integer, Rest/binary>>, N, Acc) when N > 
 decode_data_row_values0(<<ValueLen:32/integer, ValueBin:ValueLen/binary, Rest/binary>>, N, Acc) when N > 0 ->
     decode_data_row_values0(Rest, N - 1, [ValueBin | Acc]);
 decode_data_row_values0(<<_/binary>>, _N, _Acc) -> {error, invalid_value_len}.
-        
+
 decode_empty_query_response_message(<<>>) -> {ok, #empty_query_response{}};
 decode_empty_query_response_message(Payload) ->
     {error, {unknown_message, empty_query_response, Payload}}.
@@ -793,8 +793,7 @@ decode_value_text(TypeOID, Value, _OIDMap) when TypeOID =:= ?FLOAT4OID orelse Ty
             end
     end;
 decode_value_text(?NUMERICOID, Value, _OIDMap) ->
-    Decimal = decimal_conv:number(
-        binary_to_list(Value)),
+    Decimal = ?to_decimal(Value),
     {decimal, Decimal};
 decode_value_text(?INETOID, Value, _OIDMap) ->
     {ok, IPAddress} = inet:parse_address(
@@ -1060,17 +1059,12 @@ decode_numeric_bin(<<0:16/unsigned, _Weight:16, 16#C000:16/unsigned, 0:16/unsign
 decode_numeric_bin(<<Len:16/unsigned, Weight:16/signed, Sign:16/unsigned, DScale:16/unsigned, Tail/binary>>) when Sign =:= 16#0000 orelse Sign =:= 16#4000 ->
     Len = byte_size(Tail) div 2,
     {ValueInt, DecShift} = decode_numeric_bin0(Tail, Weight, 0),
-    DecSign = case Sign of
-                16#0000 -> 0;
-                16#4000 -> 1
-              end,
-    Coefficient = decshift(ValueInt, -(DecShift + DScale)),
-    {decimal, {DecSign, Coefficient, -DScale}}.
-
-decshift(V, 0) -> V;
-decshift(V, E) when E < 0 -> decshift(V * 10, E + 1);
-decshift(V, E) when E > 0 -> decshift(V div 10, E - 1).
-
+    Coefficient0 = decshift(ValueInt, -(DecShift + DScale)),
+    Coefficient = case Sign of
+                16#0000 -> Coefficient0;
+                16#4000 -> -Coefficient0
+    end,
+    {decimal, ?to_decimal({Coefficient, -DScale})}.
 
 -define(NBASE, 10000).
 
@@ -1078,6 +1072,10 @@ decode_numeric_bin0(<<>>, Weight, Acc) -> {Acc, (Weight + 1) * 4};
 decode_numeric_bin0(<<Digit:16, Tail/binary>>, Weight, Acc) when Digit >= 0 andalso Digit < ?NBASE ->
     NewAcc = (Acc * ?NBASE) + Digit,
     decode_numeric_bin0(Tail, Weight - 1, NewAcc).
+
+decshift(V, 0) -> V;
+decshift(V, E) when E < 0 -> decshift(V * 10, E + 1);
+decshift(V, E) when E > 0 -> decshift(V div 10, E - 1).
 
 decode_oid(Oid, OIDMap) ->
     case gb_trees:lookup(Oid, OIDMap) of
