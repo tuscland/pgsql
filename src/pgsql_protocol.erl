@@ -168,6 +168,9 @@ encode_parameter(Integer, _Type, _OIDMap, _IntegerDateTimes) when is_integer(Int
     IntegerBin = list_to_binary(IntegerStr),
     Size = byte_size(IntegerBin),
     {text, <<Size:32/integer, IntegerBin/binary>>};
+encode_parameter({text, Binary}, _Type, _OIDMap, _IntegerDateTimes) when is_binary(Binary) ->
+    Size = byte_size(Binary),
+    {text, <<Size:32/integer, Binary/binary>>};
 encode_parameter({decimal, Decimal}, _Type, _OIDMap, _IntegerDateTimes) ->
     %% Why is the Type undefined?
     DecimalBin = ?to_binary(Decimal),
@@ -858,8 +861,9 @@ decode_value_text(?POLYGONOID, Value, _OIDMap) ->
     {polygon, Points};
 decode_value_text(?VOIDOID, _Value, _OIDMap) -> null;
 decode_value_text(?UUIDOID, Value, _OIDMap) ->
-    {ok,[AI, BI, CI, DI, EI],[]} = io_lib:fread("~16u-~16u-~16u-~16u-~16u", binary_to_list(Value)),
-    <<AI:32, BI:16, CI:16, DI:16, EI:48>>;
+    Value;
+%%    {ok,[AI, BI, CI, DI, EI],[]} = io_lib:fread("~16u-~16u-~16u-~16u-~16u", binary_to_list(Value)),
+%%    <<AI:32, BI:16, CI:16, DI:16, EI:48>>;
 decode_value_text(TypeOID, Value, _OIDMap) when TypeOID =:= ?TEXTOID
             orelse TypeOID =:= ?NAMEOID
             orelse TypeOID =:= ?BPCHAROID
@@ -984,7 +988,7 @@ decode_value_bin(?INETOID, <<2,  32, 0,  4, B1, B2, B3, B4>>, _OIDMap, _IntegerD
 decode_value_bin(?INETOID, <<3, 128, 0, 16, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16>>, _OIDMap, _IntegerDateTimes) ->
     {inet, {B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16}};
 decode_value_bin(?UUIDOID, Value, _OIDMap, _IntegerDateTimes) ->
-    Value;
+    uuid:uuid_to_string(Value, binary_standard);
 decode_value_bin(?DATEOID, <<Date:32/signed-integer>>, _OIDMap, true) -> calendar:gregorian_days_to_date(Date + ?POSTGRESQL_GD_EPOCH);
 decode_value_bin(?TIMEOID, <<Time:64/signed-integer>>, _OIDMap, true) -> decode_time_int(Time);
 decode_value_bin(?TIMETZOID, <<Time:64/signed-integer, TZ:32/signed-integer>>, _OIDMap, true) -> decode_time_int(Time, TZ);
