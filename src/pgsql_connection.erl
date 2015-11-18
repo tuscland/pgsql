@@ -547,6 +547,8 @@ code_change(Vsn, State, Extra) ->
 terminate(_Reason, #state{socket = closed}) ->
     ok;
 terminate(_Reason, #state{socket = {SocketModule, Socket}}) ->
+    Packet = pgsql_protocol:encode_terminate_message(),
+    SocketModule:send(Socket, Packet),
     SocketModule:close(Socket),
     ok.
 

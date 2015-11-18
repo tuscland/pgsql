@@ -18,6 +18,7 @@
     encode_describe_message/2,
     encode_execute_message/2,
     encode_sync_message/0,
+    encode_terminate_message/0,
     encode_flush_message/0,
     encode_cancel_message/2,
     encode_copy_data_message/1,
@@ -440,6 +441,13 @@ encode_execute_message(PortalName, MaxRows) ->
 -spec encode_sync_message() -> binary().
 encode_sync_message() ->
     <<$S, 4:32/integer>>.
+
+%%--------------------------------------------------------------------
+%% @doc Encode a terminate message.
+%%
+-spec encode_terminate_message() -> binary().
+encode_terminate_message() ->
+    <<$X, 4:32/integer>>.
 
 %%--------------------------------------------------------------------
 %% @doc Encode a flush message.
